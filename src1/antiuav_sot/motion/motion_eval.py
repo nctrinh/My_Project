@@ -171,9 +171,15 @@ def run_motion_on_sequence(
                 )[0]
                 ious = iou_vector_xyxy(gt_xyxy, boxes[valid_idx])
                 local_best = int(np.argmax(ious))
-                best_idx = int(valid_idx[local_best])
-                best_iou = float(ious[local_best])
-                best_strength = float(strengths[best_idx])
+                candidate_best_iou = float(ious[local_best])
+                # np.argmax tra ve mot index NGAY CA KHI moi IoU = 0 (khong box
+                # nao thuc su cham GT) - chi coi la "best match" thuc su (va to
+                # do khi ve) neu IoU > 0, tranh highlight nham mot box khong
+                # overlap GT chi vi no la "lon nhat trong cac so 0".
+                if candidate_best_iou > 0.0:
+                    best_idx = int(valid_idx[local_best])
+                    best_iou = candidate_best_iou
+                    best_strength = float(strengths[best_idx])
 
         if has_motion_stage:
             frame_results.append(
