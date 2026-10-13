@@ -125,7 +125,7 @@ class SotPipeline:
         self.constraints = constraints
         self.detector = detector
 
-        self.frame_buffer = FrameBuffer()
+        self.frame_buffer = FrameBuffer(lag=constraints.motion_frame_lag)
         self.track_state = TrackStateTable.create_empty(constraints.n_track_slots)
         self.fsm = SimpleTrackerFSM(
             config=TrackerFsmConfig(
@@ -294,6 +294,14 @@ class SotPipeline:
                 merge_min_fill_ratio=c.motion_merge_min_fill_ratio,
                 priority_boxes=priority_boxes,
                 priority_iou_threshold=c.motion_candidate_anchor_iou,
+                model=c.motion_model,
+                irls_iters=c.motion_irls_iters,
+                huber_delta=c.motion_huber_delta,
+                pyramid_levels=c.motion_pyramid_levels,
+                thresh_factor=c.motion_thresh_factor,
+                min_area=c.motion_min_area,
+                strength_metric=c.motion_strength_metric,
+                min_strength=c.motion_min_strength,
             )
         else:
             # Frame dau tien cua sequence: chua co T-1, khong co motion candidate.

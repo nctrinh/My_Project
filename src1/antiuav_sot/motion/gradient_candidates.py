@@ -224,6 +224,7 @@ def gradient_motion_candidates(
     thresh_factor: float = 2.5,
     min_area: int = 20,
     strength_metric: str = "sum",
+    min_strength: float = float("-inf"),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sinh motion candidate bang gradient global-motion compensation, tra ve
@@ -248,6 +249,9 @@ def gradient_motion_candidates(
         (UAV tren troi) diem cao, vung nam giua clutter cung chuyen dong (la
         cay, cum den, parallax toa nha) diem thap vi vanh xung quanh cung co
         residual cao. Co the am.
+    min_strength: bo candidate co strength (theo strength_metric) < nguong
+        nay, TRU candidate duoc neo boi priority_boxes. Mac dinh -inf = khong
+        loc (contrast co the am nen khong dung 0.0 lam "tat").
     min_box_size / max_box_size: loc theo TUNG CHIEU (w va h deu phai nam
         trong [min_box_size, max_box_size]) - loai bo blob qua nho (nhieu)
         hoac qua lon (thuong la vung camera bu dong khong tot, khong phai
@@ -334,8 +338,15 @@ def gradient_motion_candidates(
                 box, priority_boxes, priority_iou_threshold
             )
 
+    # min_strength ap dung TRUOC khi cat top-K (nhuong slot cho box du manh)
+    # va MIEN cho candidate duoc neo - UAV dang theo doi co residual yeu van
+    # phai giu duoc, dung tinh than Issue 6.
+    kept = [
+        i for i in range(len(filtered))
+        if anchored_flags[i] or filtered[i][1] >= min_strength
+    ]
     order = sorted(
-        range(len(filtered)),
+        kept,
         key=lambda i: (anchored_flags[i], filtered[i][1]),
         reverse=True,
     )

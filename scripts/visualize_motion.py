@@ -27,6 +27,7 @@ Cach dung:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -43,27 +44,6 @@ from antiuav_sot.utils.config import load_config
 from antiuav_sot.utils.viz import SequenceVideoWriter
 
 
-def _build_params(args: argparse.Namespace, cfg) -> MotionSearchParams:
-    fpga = cfg.fpga
-    return MotionSearchParams(
-        max_motion_candidates=args.max_motion_candidates or fpga.max_motion_candidates,
-        min_box_size=args.min_box_size or fpga.motion_min_box_size,
-        max_box_size=args.max_box_size or fpga.motion_max_box_size,
-        merge_gap_ratio=args.merge_gap_ratio or fpga.motion_merge_gap_ratio,
-        max_aspect_ratio=args.max_aspect_ratio or fpga.motion_max_aspect_ratio,
-        merge_min_fill_ratio=args.merge_min_fill_ratio or fpga.motion_merge_min_fill_ratio,
-        model=args.model,
-        irls_iters=args.irls_iters,
-        huber_delta=args.huber_delta,
-        pyramid_levels=args.pyramid_levels,
-        thresh_factor=args.thresh_factor,
-        min_area=args.min_area,
-        strength_metric=args.strength_metric,
-        min_strength=args.min_strength,
-        frame_lag=args.frame_lag,
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=str, default="configs1/default.yaml")
@@ -74,8 +54,9 @@ def main() -> None:
                         help="Duong dan video output (mac dinh: experiments_motion/<seq_name>_motion.mp4)")
     parser.add_argument("--fps", type=int, default=15)
 
+    # Moi tham so motion duoi day: khong truyen (None) -> lay tu khoi motion cua
+    # fpga_constraints.yaml, CUNG gia tri SotPipeline/eval_tracker dang dung.
     # ---- So luong box motion co dinh (K) + loc kich thuoc/hinh dang/hop nhat ----
-    # Khong truyen (None) -> lay tu fpga_constraints.yaml, giong pipeline that.
     parser.add_argument("--max-motion-candidates", type=int, default=None)
     parser.add_argument("--min-box-size", type=int, default=None)
     parser.add_argument("--max-box-size", type=int, default=None)
@@ -84,21 +65,21 @@ def main() -> None:
     parser.add_argument("--merge-min-fill-ratio", type=float, default=None)
 
     # ---- Strength cua box SAU KHI hop nhat + nguong loc ----
-    parser.add_argument("--strength-metric", type=str, choices=["sum", "mean", "contrast"], default="sum",
+    parser.add_argument("--strength-metric", type=str, choices=["sum", "mean", "contrast"], default=None,
                         help="sum = tong residual trong box (thien vi box lon); "
                              "mean = residual trung binh/pixel (mat do, khong thien vi dien tich); "
                              "contrast = mean trong box tru mean vanh xung quanh (phat vung clutter)")
-    parser.add_argument("--min-strength", type=float, default=0.0,
+    parser.add_argument("--min-strength", type=float, default=None,
                         help="Box hop nhat co strength < gia tri nay bi loai bo truoc khi hien thi/tinh overlap")
 
     # ---- Tham so thuat toan gradient global-motion (hiem khi can doi) ----
-    parser.add_argument("--model", type=str, choices=["affine", "translation"], default="affine")
-    parser.add_argument("--irls-iters", type=int, default=3)
-    parser.add_argument("--huber-delta", type=float, default=10.0)
-    parser.add_argument("--pyramid-levels", type=int, default=2)
-    parser.add_argument("--thresh-factor", type=float, default=2.5)
-    parser.add_argument("--min-area", type=int, default=20)
-    parser.add_argument("--frame-lag", type=int, default=5,
+    parser.add_argument("--model", type=str, choices=["affine", "translation"], default=None)
+    parser.add_argument("--irls-iters", type=int, default=None)
+    parser.add_argument("--huber-delta", type=float, default=None)
+    parser.add_argument("--pyramid-levels", type=int, default=None)
+    parser.add_argument("--thresh-factor", type=float, default=None)
+    parser.add_argument("--min-area", type=int, default=None)
+    parser.add_argument("--frame-lag", type=int, default=None,
                         help="So frame T-lag dung de tinh motion (xem motion/frame_buffer.py)")
 
     parser.add_argument("--iou-thresholds", type=float, nargs="+", default=list(DEFAULT_IOU_THRESHOLDS))
@@ -120,7 +101,9 @@ def main() -> None:
     seq = dataset.load_sequence(args.seq_name)
     print(f"[visualize_motion] Sequence '{args.seq_name}': {len(seq)} frame")
 
-    params = _build_params(args, cfg)
+    params = MotionSearchParams.from_constraints(
+        cfg.fpga, **{f.name: getattr(args, f.name) for f in dataclasses.fields(MotionSearchParams)}
+    )
     print(
         f"[visualize_motion] max_motion_candidates={params.max_motion_candidates} "
         f"min_box_size={params.min_box_size} max_box_size={params.max_box_size} "

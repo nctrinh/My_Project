@@ -53,6 +53,19 @@ motion:
 
   candidate_anchor_iou: 0.05   # nguong "neo" candidate trung track/tentative dang theo doi (Issue 6)
 
+  # ---- TUY CHON - nhanh gradient motion; chon gia tri bang scripts/eval_motion.py
+  # (CLI cua eval_motion/visualize_motion mac dinh doc cac gia tri nay) ----
+  frame_lag: 5                 # so sanh frame t voi frame t-lag (motion/frame_buffer.py)
+  strength_metric: "sum"       # sum | mean | contrast - cach tinh strength de xep hang top-K
+  min_strength: null           # bo box co strength < nguong; null = khong loc (contrast co the am)
+                               # box trung track/tentative dang theo doi duoc mien loc nay
+  thresh_factor: 2.5           # nguong residual = mean + thresh_factor * std
+  min_area: 20                 # dien tich toi thieu (px) cua mot connected component
+  model: "affine"              # affine | translation - mo hinh chuyen dong camera
+  irls_iters: 3
+  huber_delta: 10.0
+  pyramid_levels: 2
+
 # ---- Merge (ghep detector + motion candidates) ----
 fusion:
   # max_total_candidates PHAI = detector.max_det_boxes + motion.max_motion_candidates

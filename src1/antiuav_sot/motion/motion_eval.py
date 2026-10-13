@@ -51,18 +51,44 @@ class MotionSearchParams:
     max_motion_candidates: int
     min_box_size: int
     max_box_size: int
-    merge_gap_ratio: float = 0.5
-    max_aspect_ratio: float = 5.0
-    merge_min_fill_ratio: float = 0.15
-    model: str = "affine"
-    irls_iters: int = 3
-    huber_delta: float = 10.0
-    pyramid_levels: int = 2
-    thresh_factor: float = 2.5
-    min_area: int = 20
-    strength_metric: str = "sum"   # "sum" / "mean" / "contrast" - xem gradient_candidates.py
-    min_strength: float = 0.0       # loc sau cung: box hop le phai co strength >= gia tri nay
-    frame_lag: int = 5               # FrameBuffer lag - xem motion/frame_buffer.py
+    merge_gap_ratio: float
+    max_aspect_ratio: float
+    merge_min_fill_ratio: float
+    model: str
+    irls_iters: int
+    huber_delta: float
+    pyramid_levels: int
+    thresh_factor: float
+    min_area: int
+    strength_metric: str   # "sum" / "mean" / "contrast" - xem gradient_candidates.py
+    min_strength: float    # -inf = khong loc
+    frame_lag: int         # FrameBuffer lag - xem motion/frame_buffer.py
+
+    @classmethod
+    def from_constraints(cls, fpga, **overrides) -> "MotionSearchParams":
+        """Gia tri mac dinh lay tu khoi motion cua fpga_constraints.yaml - CUNG
+        nguon voi SotPipeline, nen nguong chon o day ap vao pipeline chi bang
+        cach ghi lai vao yaml. overrides co gia tri None bi bo qua."""
+        params = cls(
+            max_motion_candidates=fpga.max_motion_candidates,
+            min_box_size=fpga.motion_min_box_size,
+            max_box_size=fpga.motion_max_box_size,
+            merge_gap_ratio=fpga.motion_merge_gap_ratio,
+            max_aspect_ratio=fpga.motion_max_aspect_ratio,
+            merge_min_fill_ratio=fpga.motion_merge_min_fill_ratio,
+            model=fpga.motion_model,
+            irls_iters=fpga.motion_irls_iters,
+            huber_delta=fpga.motion_huber_delta,
+            pyramid_levels=fpga.motion_pyramid_levels,
+            thresh_factor=fpga.motion_thresh_factor,
+            min_area=fpga.motion_min_area,
+            strength_metric=fpga.motion_strength_metric,
+            min_strength=fpga.motion_min_strength,
+            frame_lag=fpga.motion_frame_lag,
+        )
+        return dataclasses.replace(
+            params, **{k: v for k, v in overrides.items() if v is not None}
+        )
 
 
 @dataclasses.dataclass
@@ -148,9 +174,8 @@ def run_motion_on_sequence(
                 thresh_factor=params.thresh_factor,
                 min_area=params.min_area,
                 strength_metric=params.strength_metric,
+                min_strength=params.min_strength,
             )
-            if params.min_strength > 0.0:
-                valid_mask = valid_mask & (strengths >= params.min_strength)
         else:
             boxes = make_empty_boxes(params.max_motion_candidates)
             valid_mask = np.zeros((params.max_motion_candidates,), dtype=bool)
