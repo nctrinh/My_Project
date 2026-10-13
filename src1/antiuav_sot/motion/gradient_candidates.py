@@ -209,13 +209,26 @@ def gradient_motion_candidates(
     pyramid_levels: int = 2,
     thresh_factor: float = 2.5,
     min_area: int = 20,
-) -> tuple[np.ndarray, np.ndarray]:
+    strength_metric: str = "sum",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sinh motion candidate bang gradient global-motion compensation, tra ve
-    dung hop dong fixed-size (boxes (K,4) xyxy, valid_mask (K,)) nhu
-    extract_motion_candidates() cu - thay the truc tiep tai pipeline.py.
+    dung hop dong fixed-size (boxes (K,4) xyxy, valid_mask (K,), strengths (K,))
+    nhu extract_motion_candidates() cu - thay the truc tiep tai pipeline.py.
+    (them truong strengths so voi ban goc - xem motion/motion_eval.py, cac
+    goi KHONG doc gia tri nay van chay binh thuong, chi can bo qua phan tu
+    thu 3 cua tuple tra ve.)
 
     frame_t, frame_t_minus_1: (H, W) uint8 grayscale, cung kich thuoc.
+    strength_metric: "sum" (mac dinh, giu nguyen hanh vi cu) = tong residual
+        (muc 'nang luong motion') trong vung box SAU KHI gop cum - thien vi
+        box lon (nhieu pixel hon = tong lon hon du mat do thap). "mean" =
+        residual trung binh/pixel (mat do) - khong thien vi theo dien tich,
+        phu hop hon khi so sanh cac box kich thuoc rat khac nhau (vd mot
+        fragment nho nhung dac, so voi mot cum lon nhung loang). Dung metric
+        nay CA DE XEP HANG top-K (thay "nang" nhat) LAN de ghi vao strengths
+        tra ve - tranh tinh huong xep hang theo mot kieu nhung bao cao gia
+        tri theo kieu khac, gay nham lan khi chon nguong min_strength.
     min_box_size / max_box_size: loc theo TUNG CHIEU (w va h deu phai nam
         trong [min_box_size, max_box_size]) - loai bo blob qua nho (nhieu)
         hoac qua lon (thuong la vung camera bu dong khong tot, khong phai
@@ -278,7 +291,12 @@ def gradient_motion_candidates(
             continue
         ix0, iy0 = int(max(x0, 0)), int(max(y0, 0))
         ix1, iy1 = int(min(x1, residual.shape[1])), int(min(y1, residual.shape[0]))
-        strength = float(residual[iy0:iy1, ix0:ix1].sum()) if ix1 > ix0 and iy1 > iy0 else 0.0
+        if ix1 > ix0 and iy1 > iy0:
+            strength_sum = float(residual[iy0:iy1, ix0:ix1].sum())
+            strength_mean = strength_sum / float((ix1 - ix0) * (iy1 - iy0))
+        else:
+            strength_sum = strength_mean = 0.0
+        strength = strength_mean if strength_metric == "mean" else strength_sum
         filtered.append((box, strength))
 
     # ---- Issue 6: "neo uu tien" - candidate chong lan vi tri dang duoc
@@ -301,11 +319,13 @@ def gradient_motion_candidates(
 
     boxes = make_empty_boxes(max_motion_candidates)
     valid_mask = np.zeros((max_motion_candidates,), dtype=bool)
-    for i, (box, _strength) in enumerate(filtered):
+    strengths = np.zeros((max_motion_candidates,), dtype=np.float32)
+    for i, (box, strength) in enumerate(filtered):
         boxes[i] = box
         valid_mask[i] = True
+        strengths[i] = strength
 
-    return boxes, valid_mask
+    return boxes, valid_mask, strengths
 
 
 def _overlaps_any_priority_box(

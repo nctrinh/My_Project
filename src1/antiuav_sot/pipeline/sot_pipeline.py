@@ -283,7 +283,7 @@ class SotPipeline:
         # loc ty le canh, va loc theo min/max_box_size (dong hoac tinh).
         if self.frame_buffer.has_previous():
             prev_frame = self.frame_buffer.get_previous()
-            motion_boxes, motion_valid_mask = gradient_motion_candidates(
+            motion_boxes, motion_valid_mask, _motion_strengths = gradient_motion_candidates(
                 frame_t=raw_frame,
                 frame_t_minus_1=prev_frame,
                 max_motion_candidates=c.max_motion_candidates,
