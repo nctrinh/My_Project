@@ -104,6 +104,20 @@ def _union_box(boxes: list[BoxXYXY]) -> BoxXYXY:
     return (min(xs0), min(ys0), max(xs1), max(ys1))
 
 
+def _ring_mean(
+    residual: np.ndarray, ix0: int, iy0: int, ix1: int, iy1: int, inner_sum: float
+) -> float:
+    """Residual trung binh tren vanh bao quanh box [ix0:ix1, iy0:iy1], vanh
+    rong max(w, h) moi phia, cat theo bien anh. 0 neu vanh rong."""
+    margin = max(ix1 - ix0, iy1 - iy0)
+    ox0, oy0 = max(ix0 - margin, 0), max(iy0 - margin, 0)
+    ox1, oy1 = min(ix1 + margin, residual.shape[1]), min(iy1 + margin, residual.shape[0])
+    ring_area = (ox1 - ox0) * (oy1 - oy0) - (ix1 - ix0) * (iy1 - iy0)
+    if ring_area <= 0:
+        return 0.0
+    return (float(residual[oy0:oy1, ox0:ox1].sum()) - inner_sum) / ring_area
+
+
 def _cluster_and_merge_boxes(
     boxes_xyxy: list[BoxXYXY],
     merge_gap_ratio: float,
@@ -229,6 +243,11 @@ def gradient_motion_candidates(
         nay CA DE XEP HANG top-K (thay "nang" nhat) LAN de ghi vao strengths
         tra ve - tranh tinh huong xep hang theo mot kieu nhung bao cao gia
         tri theo kieu khac, gay nham lan khi chon nguong min_strength.
+        "contrast" = mean residual trong box TRU mean residual o vanh bao
+        quanh box (rong max(w, h) moi phia) - vat noi bat tren nen yen tinh
+        (UAV tren troi) diem cao, vung nam giua clutter cung chuyen dong (la
+        cay, cum den, parallax toa nha) diem thap vi vanh xung quanh cung co
+        residual cao. Co the am.
     min_box_size / max_box_size: loc theo TUNG CHIEU (w va h deu phai nam
         trong [min_box_size, max_box_size]) - loai bo blob qua nho (nhieu)
         hoac qua lon (thuong la vung camera bu dong khong tot, khong phai
@@ -296,7 +315,12 @@ def gradient_motion_candidates(
             strength_mean = strength_sum / float((ix1 - ix0) * (iy1 - iy0))
         else:
             strength_sum = strength_mean = 0.0
-        strength = strength_mean if strength_metric == "mean" else strength_sum
+        if strength_metric == "mean":
+            strength = strength_mean
+        elif strength_metric == "contrast":
+            strength = strength_mean - _ring_mean(residual, ix0, iy0, ix1, iy1, strength_sum)
+        else:
+            strength = strength_sum
         filtered.append((box, strength))
 
     # ---- Issue 6: "neo uu tien" - candidate chong lan vi tri dang duoc

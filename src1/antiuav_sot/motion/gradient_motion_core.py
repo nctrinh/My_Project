@@ -29,9 +29,14 @@ import numpy as np
 
 @nb.njit(fastmath=True)
 def numba_irls_affine(Ix, Iy, It, initial_params, irls_iters, huber_delta, step=4):
-    """Vong lap IRLS cho mo hinh Affine (6 tham so)."""
+    """Vong lap IRLS cho mo hinh Affine (6 tham so).
+
+    Ix/Iy/It duoc tinh MOT LAN tu anh da warp theo initial_params, nen he
+    A*delta = -It mo ta INCREMENT so voi initial_params. Moi vong IRLS giai
+    LAI chinh he nay voi trong so Huber moi - KHONG cong don delta qua cac
+    vong (ban cu cong don khien increment bi tinh ~irls_iters lan)."""
     H, W = Ix.shape
-    params = initial_params.copy()
+    delta = np.zeros(6, dtype=np.float64)
     weights = np.ones((H, W), dtype=np.float64)
 
     for _ in range(irls_iters):
@@ -89,8 +94,6 @@ def numba_irls_affine(Ix, Iy, It, initial_params, irls_iters, huber_delta, step=
             AtA[i, i] += 1e-6
 
         delta = np.linalg.solve(AtA, Atb)
-        for i in range(6):
-            params[i] += delta[i]
 
         for y in range(0, H, step):
             for x in range(0, W, step):
@@ -105,12 +108,12 @@ def numba_irls_affine(Ix, Iy, It, initial_params, irls_iters, huber_delta, step=
                 a5 = iy
 
                 resid = (
-                    a0 * params[0]
-                    + a1 * params[1]
-                    + a2 * params[2]
-                    + a3 * params[3]
-                    + a4 * params[4]
-                    + a5 * params[5]
+                    a0 * delta[0]
+                    + a1 * delta[1]
+                    + a2 * delta[2]
+                    + a3 * delta[3]
+                    + a4 * delta[4]
+                    + a5 * delta[5]
                 ) + it
                 abs_r = abs(resid)
 
@@ -119,14 +122,15 @@ def numba_irls_affine(Ix, Iy, It, initial_params, irls_iters, huber_delta, step=
                 else:
                     weights[y, x] = huber_delta / (abs_r + 1e-8)
 
-    return params
+    return initial_params + delta
 
 
 @nb.njit(fastmath=True)
 def numba_irls_translation(Ix, Iy, It, initial_params, irls_iters, huber_delta):
-    """Vong lap IRLS cho mo hinh Tinh tien ngang/doc (2 tham so)."""
+    """Vong lap IRLS cho mo hinh Tinh tien ngang/doc (2 tham so). Giai lai
+    increment moi vong, khong cong don - xem numba_irls_affine."""
     H, W = Ix.shape
-    params = initial_params.copy()
+    delta = np.zeros(2, dtype=np.float64)
     weights = np.ones((H, W), dtype=np.float64)
 
     for _ in range(irls_iters):
@@ -151,19 +155,17 @@ def numba_irls_translation(Ix, Iy, It, initial_params, irls_iters, huber_delta):
         AtA[1, 1] += 1e-6
 
         delta = np.linalg.solve(AtA, Atb)
-        params[0] += delta[0]
-        params[1] += delta[1]
 
         for y in range(H):
             for x in range(W):
                 ix = Ix[y, x]
                 iy = Iy[y, x]
                 it = It[y, x]
-                resid = (ix * params[0] + iy * params[1]) + it
+                resid = (ix * delta[0] + iy * delta[1]) + it
                 abs_r = abs(resid)
                 weights[y, x] = 1.0 if abs_r <= huber_delta else huber_delta / (abs_r + 1e-8)
 
-    return params
+    return initial_params + delta
 
 
 # ============================================================================
@@ -278,7 +280,11 @@ def motion_candidates_gradient(
 
     t0 = time.perf_counter()
 
-    residual = cv2.absdiff(f2.astype(np.float32), warped)
+    # Chi giu vung "nong len" (f2 sang hon anh cu da warp): UAV IR nong hon
+    # nen, nen vi tri cu cua vat (bong ma, residual am) bi loai - absdiff cu
+    # tao them mot box "theo duoi" tai vi tri t-lag.
+    diff = f2.astype(np.float32) - warped
+    residual = np.maximum(0, diff)
     residual = cv2.blur(residual, (5, 5))
 
     mean_val, std_val = cv2.meanStdDev(residual)

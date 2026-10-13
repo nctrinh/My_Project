@@ -96,9 +96,10 @@ def main() -> None:
     parser.add_argument("--merge-min-fill-ratio", type=float, default=None)
 
     # ---- Strength cua box SAU KHI hop nhat + nguong loc ----
-    parser.add_argument("--strength-metric", type=str, choices=["sum", "mean"], default="sum",
+    parser.add_argument("--strength-metric", type=str, choices=["sum", "mean", "contrast"], default="sum",
                         help="sum = tong residual trong box (thien vi box lon); "
-                             "mean = residual trung binh/pixel (mat do, khong thien vi dien tich)")
+                             "mean = residual trung binh/pixel (mat do, khong thien vi dien tich); "
+                             "contrast = mean trong box tru mean vanh xung quanh (phat vung clutter)")
     parser.add_argument("--min-strength", type=float, default=0.0,
                         help="Box hop nhat co strength < gia tri nay bi loai bo truoc khi tinh overlap")
 

@@ -60,7 +60,7 @@ class MotionSearchParams:
     pyramid_levels: int = 2
     thresh_factor: float = 2.5
     min_area: int = 20
-    strength_metric: str = "sum"   # "sum" hoac "mean" - xem gradient_candidates.py
+    strength_metric: str = "sum"   # "sum" / "mean" / "contrast" - xem gradient_candidates.py
     min_strength: float = 0.0       # loc sau cung: box hop le phai co strength >= gia tri nay
     frame_lag: int = 5               # FrameBuffer lag - xem motion/frame_buffer.py
 
