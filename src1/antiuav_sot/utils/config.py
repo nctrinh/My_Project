@@ -98,6 +98,15 @@ class FpgaConstraints:
     motion_size_adapt_grow_factor: float
     motion_size_adapt_min_samples: int
     motion_candidate_anchor_iou: float
+    motion_frame_lag: int
+    motion_strength_metric: str
+    motion_min_strength: float
+    motion_thresh_factor: float
+    motion_min_area: int
+    motion_model: str
+    motion_irls_iters: int
+    motion_huber_delta: float
+    motion_pyramid_levels: int
     # fusion
     max_total_candidates: int
     # tracker
@@ -168,6 +177,17 @@ class FpgaConstraints:
             motion_size_adapt_grow_factor=motion.get("size_adapt_grow_factor", 1.6),
             motion_size_adapt_min_samples=motion.get("size_adapt_min_samples", 5),
             motion_candidate_anchor_iou=motion.get("candidate_anchor_iou", 0.05),
+            motion_frame_lag=motion.get("frame_lag", 5),
+            motion_strength_metric=motion.get("strength_metric", "sum"),
+            motion_min_strength=(
+                float("-inf") if motion.get("min_strength") is None else motion["min_strength"]
+            ),
+            motion_thresh_factor=motion.get("thresh_factor", 2.5),
+            motion_min_area=motion.get("min_area", 20),
+            motion_model=motion.get("model", "affine"),
+            motion_irls_iters=motion.get("irls_iters", 3),
+            motion_huber_delta=motion.get("huber_delta", 10.0),
+            motion_pyramid_levels=motion.get("pyramid_levels", 2),
             max_total_candidates=fusion["max_total_candidates"],
             n_track_slots=tracker["n_track_slots"],
             tier1_iou_threshold=tracker["tier1_iou_threshold"],
@@ -262,6 +282,25 @@ class FpgaConstraints:
                 )
         if self.motion_candidate_anchor_iou < 0:
             raise ConfigError("motion.candidate_anchor_iou phai >= 0")
+        if self.motion_frame_lag < 1:
+            raise ConfigError("motion.frame_lag phai >= 1")
+        if self.motion_strength_metric not in ("sum", "mean", "contrast"):
+            raise ConfigError(
+                f"motion.strength_metric ({self.motion_strength_metric!r}) phai la "
+                "'sum', 'mean' hoac 'contrast'"
+            )
+        if self.motion_model not in ("affine", "translation"):
+            raise ConfigError(
+                f"motion.model ({self.motion_model!r}) phai la 'affine' hoac 'translation'"
+            )
+        if self.motion_irls_iters < 1:
+            raise ConfigError("motion.irls_iters phai >= 1")
+        if self.motion_huber_delta <= 0:
+            raise ConfigError("motion.huber_delta phai > 0")
+        if self.motion_pyramid_levels < 0:
+            raise ConfigError("motion.pyramid_levels phai >= 0")
+        if self.motion_min_area < 0:
+            raise ConfigError("motion.min_area phai >= 0")
         if self.max_consecutive_motion_matches < 1:
             raise ConfigError("tracker.max_consecutive_motion_matches phai >= 1")
         if self.override_conf_min < self.tier3_conf_min:

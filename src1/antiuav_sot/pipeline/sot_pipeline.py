@@ -103,6 +103,9 @@ class PipelineFrameOutput:
     detection_result: DetectionResult
     letterbox_scale: float
     letterbox_pad: tuple[int, int]
+    motion_boxes: np.ndarray          # (max_motion_candidates, 4) xyxy anh goc - candidate motion dua vao FSM
+    motion_valid_mask: np.ndarray     # (max_motion_candidates,) bool
+    motion_strengths: np.ndarray      # (max_motion_candidates,) float32, theo motion.strength_metric
 
 
 class SotPipeline:
@@ -125,7 +128,7 @@ class SotPipeline:
         self.constraints = constraints
         self.detector = detector
 
-        self.frame_buffer = FrameBuffer()
+        self.frame_buffer = FrameBuffer(lag=constraints.motion_frame_lag)
         self.track_state = TrackStateTable.create_empty(constraints.n_track_slots)
         self.fsm = SimpleTrackerFSM(
             config=TrackerFsmConfig(
@@ -283,7 +286,7 @@ class SotPipeline:
         # loc ty le canh, va loc theo min/max_box_size (dong hoac tinh).
         if self.frame_buffer.has_previous():
             prev_frame = self.frame_buffer.get_previous()
-            motion_boxes, motion_valid_mask = gradient_motion_candidates(
+            motion_boxes, motion_valid_mask, motion_strengths = gradient_motion_candidates(
                 frame_t=raw_frame,
                 frame_t_minus_1=prev_frame,
                 max_motion_candidates=c.max_motion_candidates,
@@ -294,11 +297,20 @@ class SotPipeline:
                 merge_min_fill_ratio=c.motion_merge_min_fill_ratio,
                 priority_boxes=priority_boxes,
                 priority_iou_threshold=c.motion_candidate_anchor_iou,
+                model=c.motion_model,
+                irls_iters=c.motion_irls_iters,
+                huber_delta=c.motion_huber_delta,
+                pyramid_levels=c.motion_pyramid_levels,
+                thresh_factor=c.motion_thresh_factor,
+                min_area=c.motion_min_area,
+                strength_metric=c.motion_strength_metric,
+                min_strength=c.motion_min_strength,
             )
         else:
             # Frame dau tien cua sequence: chua co T-1, khong co motion candidate.
             motion_boxes = make_empty_boxes(c.max_motion_candidates)
             motion_valid_mask = np.zeros((c.max_motion_candidates,), dtype=bool)
+            motion_strengths = np.zeros((c.max_motion_candidates,), dtype=np.float32)
 
         self.frame_buffer.update(raw_frame)
 
@@ -419,6 +431,9 @@ class SotPipeline:
             detection_result=detection_result,
             letterbox_scale=letterbox.scale,
             letterbox_pad=(letterbox.pad_left, letterbox.pad_top),
+            motion_boxes=motion_boxes,
+            motion_valid_mask=motion_valid_mask,
+            motion_strengths=motion_strengths,
         )
 
     def _apply_kalman(self, fsm_result: FsmStepResult) -> np.ndarray:

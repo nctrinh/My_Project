@@ -65,12 +65,12 @@ def main() -> None:
     # Import truc tiep tu file eval_tracker.py trong cung thu muc scripts/,
     # tranh phu thuoc vao scripts/ duoc coi la mot Python package.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from scripts.eval_tracker_motion import run_pipeline_on_sequence, run_pipeline_on_test_sequence
+    from eval_tracker_motion import run_pipeline_on_sequence, run_pipeline_on_test_sequence
 
     if is_test:
         run_pipeline_on_test_sequence(pipeline, seq, save_viz_path=output_path)
     else:
-        result = run_pipeline_on_sequence(pipeline, seq, save_viz_path=output_path)
+        result, _latencies = run_pipeline_on_sequence(pipeline, seq, save_viz_path=output_path)
         print(f"[visualize_sequence] Mean IoU tren sequence nay: {result.ious.mean():.4f}")
 
     print(f"[visualize_sequence] Da luu video: {output_path}")

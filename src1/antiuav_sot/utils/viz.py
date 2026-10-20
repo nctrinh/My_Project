@@ -14,7 +14,7 @@ import numpy as np
 COLOR_GT = (0, 255, 0)          # xanh la - ground truth
 COLOR_DETECTOR = (255, 128, 0)   # cam - box tu detector (truoc tracker)
 COLOR_TRACK = (0, 0, 255)        # do - track output cuoi cung
-COLOR_MOTION = (255, 255, 0)     # vang - candidate tu motion cue
+COLOR_MOTION = (255, 255, 0)     # cyan (BGR) - candidate tu motion cue
 COLOR_DETECTOR_BEST = (0, 255, 255)  # vang (BGR) - box detector diem cao nhat
 
 
@@ -50,12 +50,19 @@ def render_frame(
     detection_result=None,
     letterbox_scale: float | None = None,
     letterbox_pad: tuple[int, int] | None = None,
+    motion_boxes_xyxy: np.ndarray | None = None,
+    motion_valid_mask: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Ve mot frame debug day du: ground-truth (xanh la) + cac track active
-    (do, kem Track ID). Tra ve anh BGR san sang ghi ra video/anh."""
+    """Ve mot frame debug day du: motion candidate dua vao FSM (cyan, vien
+    manh), ground-truth (xanh la) + cac track active (do, kem Track ID). Tra
+    ve anh BGR san sang ghi ra video/anh."""
     from antiuav_sot.utils.box_ops import xywh_to_xyxy
 
     canvas = grayscale_to_bgr(raw_frame_gray)
+
+    if motion_boxes_xyxy is not None and motion_valid_mask is not None:
+        for idx in np.nonzero(motion_valid_mask)[0]:
+            draw_box(canvas, motion_boxes_xyxy[idx], COLOR_MOTION, thickness=1)
 
     if gt_box_xywh is not None and np.any(gt_box_xywh > 0):
         gt_xyxy = xywh_to_xyxy(gt_box_xywh[None, :])[0]

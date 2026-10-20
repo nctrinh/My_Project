@@ -16,6 +16,7 @@ Cach dung:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 import time
@@ -91,6 +92,8 @@ def run_pipeline_on_sequence(
                 detection_result=output.detection_result,
                 letterbox_scale=output.letterbox_scale,
                 letterbox_pad=output.letterbox_pad,
+                motion_boxes_xyxy=output.motion_boxes,
+                motion_valid_mask=output.motion_valid_mask,
             )
             video_writer.write(frame_bgr)
 
@@ -149,6 +152,8 @@ def run_pipeline_on_test_sequence(
                 detection_result=output.detection_result,
                 letterbox_scale=output.letterbox_scale,
                 letterbox_pad=output.letterbox_pad,
+                motion_boxes_xyxy=output.motion_boxes,
+                motion_valid_mask=output.motion_valid_mask,
             )
             video_writer.write(frame_bgr)
 
@@ -198,7 +203,7 @@ def main() -> None:
         help="Gioi han so sequence de eval nhanh khi debug",
     )
     parser.add_argument("--sequence", type=str, default=None)
-    parser.add_argument("--output-dir", type=str, default="experiments_motion_lag20",
+    parser.add_argument("--output-dir", type=str, default="experiments_motion_mean5_again",
                     help="Thư mục gốc lưu kết quả eval và visualization")
     args = parser.parse_args()
 
@@ -241,7 +246,17 @@ def main() -> None:
     if args.save_viz:
         viz_dir.mkdir(parents=True, exist_ok=True)
 
+    # Toan bo rang buoc (motion + tracker) cua lan chay nay - in ra va ghi vao
+    # JSON de doi chieu ket qua giua cac cau hinh yaml khac nhau. -inf
+    # (motion.min_strength = khong loc) ghi thanh null de JSON hop le.
+    fpga_snapshot = {
+        k: (None if isinstance(v, float) and v == float("-inf") else v)
+        for k, v in dataclasses.asdict(cfg.fpga).items()
+    }
     print(f"[eval_tracker] Danh gia {len(seq_names)} sequence (split={args.split})")
+    print("[eval_tracker] motion: " + " ".join(
+        f"{k[len('motion_'):]}={v}" for k, v in fpga_snapshot.items() if k.startswith("motion_")
+    ))
 
     all_results: list[SequenceEvalResult] = []
     all_latencies: list[float] = []
@@ -354,6 +369,9 @@ def main() -> None:
         json.dump(
             {
                 "split": args.split,
+                "config": args.config,
+                "detector_checkpoint": checkpoint,
+                "fpga_constraints": fpga_snapshot,
                 "overall_precision_at_20px": allf["precision_at_20px"],
                 "overall_success_auc": allf["success_auc"],
                 "summary": summary,
