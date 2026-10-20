@@ -1,0 +1,5 @@
+numpy==1.24.4
+opencv-contrib-python==5.0.0.93
+protobuf==3.20.3
+torch==1.13.1+cu117
+torchvision==0.14.1+cu117
