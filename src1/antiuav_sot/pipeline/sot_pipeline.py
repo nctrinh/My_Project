@@ -155,10 +155,6 @@ class SotPipeline:
                 image_diagonal=float(
                     np.hypot(constraints.image_width, constraints.image_height)
                 ),
-                max_static_frames_before_handback=(
-                    constraints.max_static_frames_before_handback
-                ),
-                static_displacement_ratio=constraints.static_displacement_ratio,
             ),
             track_state=self.track_state,
         )

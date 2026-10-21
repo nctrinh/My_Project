@@ -41,25 +41,6 @@ muc "Issue 2/4/5" de biet day du boi canh/ly do thiet ke):
             vuot max_consecutive_motion_matches: track dang troi theo motion
             lien tuc qua nhieu khung hinh ma khong duoc detector xac nhan).
 
-    Khoa "Static Lock-out" (MOI - ap dung cho ca Tang 1 va Tang Confidence
-    Override, xem track_state.py static_streak/is_static_stuck/
-    note_displacement): UAV dang bay hau nhu luon dich chuyen qua cac frame.
-    Neu mot track duoc DETECTOR tai-xac-nhan lien tuc (Tang 1/Override) ma
-    TAM box hau nhu khong dich chuyen qua max_static_frames_before_handback
-    khung hinh LIEN TIEP, do la dau hieu detector dang bam nham mot vung nen
-    tinh - gan giong UAV ve hinh dang/nhiet (vd mot vat the nho, nong, dung
-    yen trong background) - thay vi chinh vat the dang bay. Khi do track bi
-    danh dau "static-stuck": TAM THOI bi loai khoi dieu kien duoc Tang 1/
-    Confidence Override tai-xac-nhan (hang tuong ung trong iou_matrix/
-    override affinity bi zero-out), tra lai co hoi cho Tang 2/4 (MOTION) khop
-    lai dung vi tri vat thuc su dang di chuyen. Neu khong co candidate MOTION
-    nao khop duoc, track se chi "age" binh thuong (khong khop khung hinh do)
-    thay vi duoc detector gia-xac-nhan tai cho; neu dieu nay keo dai qua
-    max_track_age, track se bi xoa va nhuong lai co hoi cho mot track moi
-    (detector hoac motion) o vi tri dung. static_streak duoc reset ve 0 ngay
-    khi box dich chuyen dang ke (bat ke nguon nao khop), nen UAV THAT di
-    chuyen binh thuong khong bao gio bi anh huong boi khoa nay.
-
     Tang 2 (Motion Boxes Linking):
         Voi track/box con chua khop o cac tang truoc, xet tiep box tu MOTION
         cue. Metric so khop KHONG con la IoU chuan don thuan ma la
@@ -188,18 +169,6 @@ class TrackerFsmConfig:
     reinit_trust_conf_min: float
     # Duong cheo anh (pixel) - dung de chuan hoa khoang cach tam.
     image_diagonal: float
-    # ---- Khoa "Static Lock-out" (xem docstring module) ----
-    # So khung hinh LIEN TIEP toi da track duoc phep "dung yen" (tam hau nhu
-    # khong dich chuyen) ma van duoc Tang 1/Confidence Override tai-xac-nhan,
-    # truoc khi bi tam khoa khoi hai tang do va nhuong co hoi lai cho Tang 2/4
-    # (motion). Gia tri lon = khoan dung UAV hover lau hon nhung cham phat
-    # hien nen gia hon; gia tri nho = phat hien nen gia nhanh hon nhung de
-    # "nham" UAV thuc su dang hover/lo lung gan dung yen.
-    max_static_frames_before_handback: int
-    # Dich chuyen tam box giua hai lan khop LIEN TIEP duoi muc nay (ti le
-    # duong cheo anh) duoc coi la "khong dang ke" (dung yen) cho muc dich
-    # static_streak. Vd 0.01 voi anh 512x640 (duong cheo ~820px) ~ 8px.
-    static_displacement_ratio: float
 
 
 @dataclasses.dataclass
@@ -333,23 +302,6 @@ class SimpleTrackerFSM:
             dtype=bool,
         )
 
-        # Khoa "Static Lock-out" (xem docstring module): track da "dung yen"
-        # (tam box hau nhu khong dich chuyen) qua max_static_frames_before_
-        # handback khung hinh LIEN TIEP, du van dang duoc tai-xac-nhan - nghi
-        # van la detector dang bam nham mot vung nen tinh. Hang tuong ung bi
-        # loai khoi Tang 1/Confidence Override (ben duoi) de tra co hoi lai
-        # cho Tang 2/4 (motion).
-        static_stuck_row = np.array(
-            [
-                self.track_state.active[slot_idx]
-                and self.track_state.is_static_stuck(
-                    slot_idx, self.config.max_static_frames_before_handback
-                )
-                for slot_idx in range(n_slots)
-            ],
-            dtype=bool,
-        )
-
         # Ma tran "hieu qua" dung cho moi cap co candidate nguon MOTION:
         # max(IoU, containment) - sua Tier-2 IoU Failure (xem docstring
         # module) - VA zero-out cac hang track dang bi khoa
@@ -360,26 +312,15 @@ class SimpleTrackerFSM:
         motion_effective[motion_dragged_row, :] = 0.0
         effective_matrix = iou_matrix.copy()
         effective_matrix[:, is_motion] = motion_effective[:, is_motion]
-        # Khoa "Static Lock-out" ap dung CA cho Tang 4 (du phong cuoi, khong
-        # phan biet nguon theo mac dinh): zero-out rieng cac o (hang
-        # static-stuck, cot DETECTOR) de Tang 4 khong tro thanh "cua hau" cho
-        # detector lach qua khoa da ap o Tang 1/Override. Cot MOTION cua cac
-        # hang nay giu nguyen - day chinh la muc tieu cua khoa, nhuong lai co
-        # hoi cho motion.
-        effective_matrix[static_stuck_row[:, None] & is_detector[None, :]] = 0.0
 
         # ---- Tang 1: Middle Score Linking (detector, IoU cao, conf trung binh tro len) ----
-        # Hang static-stuck bi zero-out: track "dung yen qua lau" khong duoc
-        # DETECTOR tai-xac-nhan o tang nay nua (xem khoa "Static Lock-out").
-        tier1_iou_matrix = iou_matrix.copy()
-        tier1_iou_matrix[static_stuck_row, :] = 0.0
         tier1_candidate_mask = (
             candidates.valid_mask
             & is_detector
             & (candidates.scores >= self.config.tier1_conf_min)
         )
         self._match_tier(
-            iou_matrix=tier1_iou_matrix,
+            iou_matrix=iou_matrix,
             iou_threshold=self.config.tier1_iou_threshold,
             candidate_eligible_mask=tier1_candidate_mask,
             tier_id=TIER_MIDDLE_SCORE,
@@ -406,7 +347,6 @@ class SimpleTrackerFSM:
         override_affinity = self._build_override_affinity(
             iou_matrix=iou_matrix,
             motion_dragged_row=motion_dragged_row,
-            static_stuck_row=static_stuck_row,
             candidates=candidates,
             candidate_eligible_mask=override_candidate_mask,
         )
@@ -523,7 +463,6 @@ class SimpleTrackerFSM:
         self,
         iou_matrix: np.ndarray,
         motion_dragged_row: np.ndarray,
-        static_stuck_row: np.ndarray,
         candidates: CandidateSet,
         candidate_eligible_mask: np.ndarray,
     ) -> np.ndarray:
@@ -552,9 +491,6 @@ class SimpleTrackerFSM:
         Dieu kien HOP LE cua mot cap (track slot, candidate):
             - track active, va thuoc pham vi override (moi track active, hoac
               chi track motion-dragged neu override_motion_dragged_only = True)
-            - track KHONG dang bi khoa "Static Lock-out" (static_stuck_row) -
-              track dung yen qua lau khong duoc DETECTOR chiem lai o tang
-              nay, xem docstring module va track_state.is_static_stuck()
             - candidate da qua candidate_eligible_mask (detector, chua khop,
               confidence >= override_conf_min)
             - VA mot trong hai:
@@ -581,9 +517,6 @@ class SimpleTrackerFSM:
         row_allowed = np.asarray(self.track_state.active, dtype=bool).copy()
         if self.config.override_motion_dragged_only:
             row_allowed &= motion_dragged_row
-        # Khoa "Static Lock-out": track dung yen qua lau khong duoc DETECTOR
-        # chiem lai o tang nay nua (xem docstring module).
-        row_allowed &= ~static_stuck_row
 
         pair_allowed = row_allowed[:, None] & candidate_eligible_mask[None, :]
 
@@ -623,18 +556,6 @@ class SimpleTrackerFSM:
             + _OVERRIDE_DISTANCE_TIE_BREAK * (1.0 - d_norm[pair_valid])
         )
         return affinity
-
-    def _has_moved(self, prev_box: np.ndarray, new_box: np.ndarray) -> bool:
-        """True neu tam cua new_box dich chuyen DANG KE so voi prev_box, dung
-        boi khoa "Static Lock-out" (xem docstring module va
-        track_state.note_displacement/is_static_stuck).
-
-        Nguong = static_displacement_ratio * image_diagonal - so sanh o dang
-        BINH PHUONG (khong can can bac hai, phu hop RTL)."""
-        dx = (new_box[0] + new_box[2]) / 2.0 - (prev_box[0] + prev_box[2]) / 2.0
-        dy = (new_box[1] + new_box[3]) / 2.0 - (prev_box[1] + prev_box[3]) / 2.0
-        threshold = self.config.static_displacement_ratio * self.config.image_diagonal
-        return (dx * dx + dy * dy) > (threshold * threshold)
 
     def _match_tier(
         self,
@@ -690,10 +611,6 @@ class SimpleTrackerFSM:
             # tu candidate (xem docstring ham nay va _apply_motion_size_preservation).
             candidate_source = int(candidates.source[best_cand])
             box_to_commit = candidates.boxes[best_cand]
-            # Giu lai box CU (truoc khi bi update_track() ghi de) de tinh
-            # dich chuyen tam cho khoa "Static Lock-out" (xem docstring module
-            # va track_state.note_displacement).
-            prev_box = self.track_state.boxes[best_slot].copy()
             if candidate_source == SOURCE_MOTION:
                 box_to_commit = _apply_motion_size_preservation(
                     box_to_commit, self.track_state.boxes[best_slot]
@@ -703,9 +620,6 @@ class SimpleTrackerFSM:
                 int(best_slot),
                 box_to_commit,
                 float(candidates.scores[best_cand]),
-            )
-            self.track_state.note_displacement(
-                int(best_slot), self._has_moved(prev_box, box_to_commit)
             )
             if candidate_source == SOURCE_MOTION:
                 self.track_state.note_motion_match(int(best_slot))

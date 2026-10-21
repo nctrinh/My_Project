@@ -132,17 +132,6 @@ tracker:
                                        # 1.0 = khong gioi han thuc te; giam (vd 0.25) neu muon
                                        # chan detector false-positive o goc anh keo track di
 
-  # ---- TUY CHON - khoa "Static Lock-out": giao lai quyen cho MOTION khi
-  # track duoc DETECTOR tai-xac-nhan lien tuc nhung hau nhu khong dich
-  # chuyen (nghi van la detector bam nham mot vung nen tinh giong UAV, thay
-  # vi chinh vat the dang bay) - xem docstring tracker/simple_tracker_fsm.py ----
-  max_static_frames_before_handback: 10  # so khung hinh LIEN TIEP toi da track duoc phep
-                                       # "dung yen" ma van duoc Tang 1/Confidence Override
-                                       # tai-xac-nhan, truoc khi bi tam khoa khoi hai tang do
-  static_displacement_ratio: 0.01     # dich chuyen tam giua 2 lan khop LIEN TIEP duoi muc nay
-                                       # (ti le duong cheo anh) bi coi la "dung yen". Vd 0.01
-                                       # voi anh 512x640 (duong cheo ~820px) ~ 8px
-
 # ---- Kalman filter (tuy chon) ----
 kalman:
   enabled: false

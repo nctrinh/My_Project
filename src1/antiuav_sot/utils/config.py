@@ -127,8 +127,6 @@ class FpgaConstraints:
     reinit_max_center_distance_ratio: float
     reinit_lost_memory_frames: int
     reinit_trust_conf_min: float
-    max_static_frames_before_handback: int
-    static_displacement_ratio: float
     # kalman
     kalman_enabled: bool
     kalman_state_dim: int
@@ -216,10 +214,6 @@ class FpgaConstraints:
             reinit_trust_conf_min=tracker.get(
                 "reinit_trust_conf_min", tracker["tier3_conf_min"]
             ),
-            max_static_frames_before_handback=tracker.get(
-                "max_static_frames_before_handback", 10
-            ),
-            static_displacement_ratio=tracker.get("static_displacement_ratio", 0.01),
             kalman_enabled=kalman["enabled"],
             kalman_state_dim=kalman["state_dim"],
             kalman_process_noise=kalman["process_noise"],
@@ -360,15 +354,6 @@ class FpgaConstraints:
                     "chan duoc gi o nhanh detector. Dat >= tier3_conf_min (bang nhau = "
                     "detector khong bao gio bi gate, chi gate nhanh motion)."
                 )
-        if self.max_static_frames_before_handback < 1:
-            raise ConfigError(
-                "tracker.max_static_frames_before_handback phai >= 1"
-            )
-        if not (0.0 < self.static_displacement_ratio <= 1.0):
-            raise ConfigError(
-                f"tracker.static_displacement_ratio ({self.static_displacement_ratio}) "
-                "phai nam trong (0.0, 1.0] - tinh theo ti le duong cheo anh."
-            )
         if not (0.0 <= self.tentative_active_overlap_max_iou <= 1.0):
             raise ConfigError(
                 "tentative_motion_tracks.active_overlap_max_iou phai nam trong [0.0, 1.0]"

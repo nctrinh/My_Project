@@ -43,18 +43,6 @@ class TrackStateTable:
                 chat" muc do motion duoc phep dan dat track (Motion Priority
                 Conflict) - xem simple_tracker_fsm.py (max_consecutive_motion_
                 matches, Tier Confidence Override).
-    static_streak: (n_slots,) int32 - so khung hinh LIEN TIEP GAN NHAT track
-                nay duoc khop (boi nguon nao cung duoc) ma TAM box hau nhu
-                khong dich chuyen (xem note_displacement). Mot track THAT la
-                UAV dang bay hau nhu luon dich chuyen qua cac frame; track bi
-                "dung yen" qua lau trong khi van duoc tai-xac-nhan lien tuc
-                thuong la dau hieu detector dang bam nham mot vung nen tinh
-                (giong UAV ve hinh dang/nhiet) thay vi vat the thuc. Dung boi
-                simple_tracker_fsm.py (max_static_frames_before_handback) de
-                tam thoi KHONG cho DETECTOR (Tang 1/Confidence Override) tai
-                xac nhan track dang "dung yen qua lau" nua, tra lai co hoi cho
-                MOTION (Tang 2/4) khop lai dung vi tri UAV thuc su dang di
-                chuyen. Reset ve 0 ngay khi box dich chuyen dang ke.
     lost_boxes: (n_slots, 4) xyxy - vi tri CUOI CUNG cua track vua bi xoa khoi
                 khe nay ("bong ma"/ghost cua track da mat). Giu lai de chan
                 viec khoi tao track moi o mot vi tri XA hoan toan ngay sau khi
@@ -74,7 +62,6 @@ class TrackStateTable:
     active: np.ndarray
     confidence: np.ndarray
     motion_streak: np.ndarray
-    static_streak: np.ndarray
     lost_boxes: np.ndarray
     lost_ages: np.ndarray
     lost_valid: np.ndarray
@@ -90,7 +77,6 @@ class TrackStateTable:
             active=np.zeros((n_slots,), dtype=bool),
             confidence=np.zeros((n_slots,), dtype=np.float32),
             motion_streak=np.zeros((n_slots,), dtype=np.int32),
-            static_streak=np.zeros((n_slots,), dtype=np.int32),
             lost_boxes=make_empty_boxes(n_slots),
             lost_ages=np.zeros((n_slots,), dtype=np.int32),
             lost_valid=np.zeros((n_slots,), dtype=bool),
@@ -143,7 +129,6 @@ class TrackStateTable:
         self.active[slot_idx] = True
         self.confidence[slot_idx] = confidence
         self.motion_streak[slot_idx] = initial_motion_streak
-        self.static_streak[slot_idx] = 0
         # Khe nay vua co track tro lai - ghost cua track cu khong con y nghia.
         self.clear_lost_memory(slot_idx)
         return new_id
@@ -178,32 +163,6 @@ class TrackStateTable:
         du duoc Tang 2/4 tiep tuc cap nhat boi motion (xem simple_tracker_fsm.py)."""
         return int(self.motion_streak[slot_idx]) >= max_consecutive_motion_matches
 
-    def note_displacement(self, slot_idx: int, moved: bool) -> None:
-        """Bao hieu track tai slot_idx vua duoc khop (khong phan biet nguon)
-        khung hinh nay, kem theo viec TAM box co dich chuyen dang ke
-        (moved=True) hay khong (moved=False) so voi vi tri truoc do - xem
-        simple_tracker_fsm.py (nguong dich chuyen la tham so cau hinh, module
-        nay khong tu quyet dinh nguong).
-
-        moved=True -> reset static_streak ve 0 (track dang hoat dong binh
-        thuong, giong UAV thuc su di chuyen).
-        moved=False -> tang static_streak them 1 (mot dau hieu nghi van, tich
-        luy qua nhieu khung hinh LIEN TIEP se duoc is_static_stuck() bao
-        hieu)."""
-        if moved:
-            self.static_streak[slot_idx] = 0
-        else:
-            self.static_streak[slot_idx] += 1
-
-    def is_static_stuck(self, slot_idx: int, max_static_frames: int) -> bool:
-        """True neu track tai slot_idx da qua nhieu khung hinh LIEN TIEP duoc
-        khop ma hau nhu khong dich chuyen - nghi van la detector dang bam
-        nham mot vung nen tinh (gan giong UAV) thay vi vat the thuc dang bay.
-        Dung boi simple_tracker_fsm.py de tam thoi khoa DETECTOR (Tang 1/
-        Confidence Override) khoi track nay, tra lai co hoi cho MOTION (Tang
-        2/4) khop lai dung vi tri vat thuc su dang di chuyen."""
-        return int(self.static_streak[slot_idx]) >= max_static_frames
-
     def age_track(self, slot_idx: int) -> None:
         """Tang bo dem tuoi track khi khong khop duoc box nao khung hinh nay."""
         self.ages[slot_idx] += 1
@@ -222,7 +181,6 @@ class TrackStateTable:
         self.ages[slot_idx] = 0
         self.active[slot_idx] = False
         self.confidence[slot_idx] = 0.0
-        self.static_streak[slot_idx] = 0
         self.motion_streak[slot_idx] = 0
 
     def check_and_expire_stale_tracks(self, max_track_age: int) -> list[int]:
